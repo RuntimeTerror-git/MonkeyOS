@@ -1,0 +1,14 @@
+# Build files
+*.o
+*.iso
+
+# Build directories
+build/
+bin/
+
+# Editor files
+.vscode/
+
+# OS generated files
+*.img
+

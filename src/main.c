@@ -13,9 +13,6 @@
 // Limine uses a "base revision" to allow the kernel to tell
 // the bootloader which version of the basic Limine protocol
 // it expects.
-//
-// If the bootloader does not support this revision,
-// we will stop the kernel later in kmain().
 
 __attribute__((used, section(".limine_requests")))
 static volatile uint64_t limine_base_revision[] =
@@ -26,14 +23,10 @@ static volatile uint64_t limine_base_revision[] =
 // FRAMEBUFFER REQUEST
 // ============================================================
 
-// We are asking Limine to give our kernel information about
-// a framebuffer.
+// Ask Limine to give our kernel information about a framebuffer.
 //
-// A framebuffer is an area of memory that represents the
-// pixels displayed on the screen.
-//
-// Once Limine gives us this information, we can directly
-// write pixels into that memory.
+// A framebuffer is an area of memory representing the pixels
+// displayed on the screen.
 
 __attribute__((used, section(".limine_requests")))
 static volatile struct limine_framebuffer_request framebuffer_request = {
@@ -45,11 +38,6 @@ static volatile struct limine_framebuffer_request framebuffer_request = {
 // ============================================================
 // LIMINE REQUEST START / END MARKERS
 // ============================================================
-
-// These markers tell Limine where our requests begin and end.
-//
-// Limine looks for these special sections when loading
-// our kernel and uses them to find the requests we made.
 
 __attribute__((used, section(".limine_requests_start")))
 static volatile uint64_t limine_requests_start_marker[] =
@@ -64,23 +52,16 @@ static volatile uint64_t limine_requests_end_marker[] =
 // MEMORY FUNCTIONS
 // ============================================================
 
-// GCC and Clang may generate calls to functions such as
-// memcpy(), memset(), memmove(), and memcmp().
+// MonkeyOS is a freestanding kernel.
 //
-// Because MonkeyOS is a freestanding kernel, we cannot rely
-// on the normal C standard library being available.
+// Therefore we cannot depend on the normal C standard library.
 //
-// Therefore, we implement these functions ourselves.
+// We implement the basic memory functions ourselves.
 
 
 // ------------------------------------------------------------
 // memcpy()
 // ------------------------------------------------------------
-
-// Copy 'n' bytes from src to dest.
-//
-// memcpy() assumes that the source and destination memory
-// regions do not overlap.
 
 void *memcpy(void *restrict dest,
              const void *restrict src,
@@ -101,8 +82,6 @@ void *memcpy(void *restrict dest,
 // memset()
 // ------------------------------------------------------------
 
-// Fill 'n' bytes of memory with the value 'c'.
-
 void *memset(void *s, int c, size_t n)
 {
     uint8_t *p = s;
@@ -119,11 +98,6 @@ void *memset(void *s, int c, size_t n)
 // memmove()
 // ------------------------------------------------------------
 
-// Copy 'n' bytes from src to dest.
-//
-// Unlike memcpy(), memmove() is safe when the source and
-// destination memory regions overlap.
-
 void *memmove(void *dest,
               const void *src,
               size_t n)
@@ -131,22 +105,23 @@ void *memmove(void *dest,
     uint8_t *pdest = dest;
     const uint8_t *psrc = src;
 
-    // If destination is before source, copy forwards.
+    // Destination is before source.
+    //
+    // Copy forwards.
 
-    if ((uintptr_t)src > (uintptr_t)dest) {
-
+    if ((uintptr_t)src > (uintptr_t)dest)
+    {
         for (size_t i = 0; i < n; i++) {
             pdest[i] = psrc[i];
         }
     }
 
-    // If destination is after source, copy backwards.
+    // Destination is after source.
     //
-    // Copying backwards prevents us from overwriting source
-    // data that we still need.
+    // Copy backwards so overlapping memory is handled safely.
 
-    else if ((uintptr_t)src < (uintptr_t)dest) {
-
+    else if ((uintptr_t)src < (uintptr_t)dest)
+    {
         for (size_t i = n; i > 0; i--) {
             pdest[i - 1] = psrc[i - 1];
         }
@@ -160,13 +135,6 @@ void *memmove(void *dest,
 // memcmp()
 // ------------------------------------------------------------
 
-// Compare two blocks of memory.
-//
-// Returns:
-//   0  -> memory blocks are equal
-//  -1  -> s1 is smaller
-//   1  -> s1 is greater
-
 int memcmp(const void *s1,
            const void *s2,
            size_t n)
@@ -174,8 +142,8 @@ int memcmp(const void *s1,
     const uint8_t *p1 = s1;
     const uint8_t *p2 = s2;
 
-    for (size_t i = 0; i < n; i++) {
-
+    for (size_t i = 0; i < n; i++)
+    {
         if (p1[i] != p2[i]) {
             return p1[i] < p2[i] ? -1 : 1;
         }
@@ -189,21 +157,21 @@ int memcmp(const void *s1,
 // HALT AND CATCH FIRE
 // ============================================================
 
-// This function permanently stops the CPU from doing useful
-// work.
+// Permanently stop the CPU.
 //
-// We use it when something goes wrong or when our kernel has
-// finished its current job.
+// We use this when something goes wrong or when the kernel
+// has finished its current task.
 
 static void hcf(void)
 {
-    for (;;) {
-
-        // HLT tells the CPU to halt until an interrupt occurs.
+    for (;;)
+    {
+        // HLT stops the CPU until an interrupt occurs.
 
         asm ("hlt");
     }
 }
+
 
 // ============================================================
 // I/O PORT INPUT
@@ -211,10 +179,8 @@ static void hcf(void)
 
 // Read one byte from an x86 hardware I/O port.
 //
-// The keyboard controller uses I/O ports to communicate
+// The keyboard controller uses I/O ports for communication
 // with the CPU.
-//
-// We will use this function to read keyboard data.
 
 static uint8_t inb(uint16_t port)
 {
@@ -229,18 +195,14 @@ static uint8_t inb(uint16_t port)
     return value;
 }
 
+
 // ============================================================
 // KEYBOARD PORTS
 // ============================================================
 //
-// The traditional PC keyboard controller uses:
+// 0x64 -> Keyboard controller STATUS register
+// 0x60 -> Keyboard DATA register
 //
-//     0x64 -> Keyboard controller STATUS register
-//     0x60 -> Keyboard DATA register
-//
-// We use these ports to communicate with the keyboard.
-//
-// ============================================================
 
 #define KEYBOARD_DATA_PORT    0x60
 #define KEYBOARD_STATUS_PORT  0x64
@@ -250,80 +212,37 @@ static uint8_t inb(uint16_t port)
 // KEYBOARD POLLING
 // ============================================================
 //
-// We are NOT using keyboard interrupts yet.
+// We are using polling instead of keyboard interrupts.
 //
-// Instead, the CPU repeatedly checks port 0x64.
+// The CPU repeatedly checks port 0x64.
 //
-// This is called POLLING.
+// Bit 0 of the status register:
 //
-// ------------------------------------------------------------
+//     0 -> no data available
+//     1 -> data available
 //
-// Status register (0x64):
+// A PS/2 keyboard normally uses Set 1 scancodes here.
 //
-// Bit 0 = Output Buffer Status
+// Example:
 //
-//     0 -> No data available
-//     1 -> Data available
+//     A pressed  -> 0x1E
+//     A released -> 0x9E
 //
-// ------------------------------------------------------------
+// Bit 7 is set in a release code.
 //
-// A normal PS/2 keyboard produces:
+// Therefore we ignore codes with bit 7 set.
 //
-//     KEY PRESS
-//         ↓
-//     MAKE CODE
-//
-//     KEY RELEASE
-//         ↓
-//     BREAK CODE
-//
-// For example, the A key:
-//
-//     Press A:
-//         0x1E
-//
-//     Release A:
-//         0x9E
-//
-// Notice:
-//
-//     0x9E has bit 7 set.
-//
-// Therefore:
-//
-//     bit 7 = 0 → MAKE CODE
-//     bit 7 = 1 → BREAK CODE
-//
-// We only want MAKE codes right now.
-//
-// ============================================================
 
 static uint8_t keyboard_poll(void)
 {
-    // --------------------------------------------------------
-    // STEP 1: Check keyboard controller status
-    // --------------------------------------------------------
+    // Read keyboard controller status.
 
     uint8_t status = inb(KEYBOARD_STATUS_PORT);
 
 
-    // --------------------------------------------------------
-    // STEP 2: Check whether data is available
-    // --------------------------------------------------------
-    //
-    // Bit 0 tells us whether the output buffer contains data.
-    //
-    //     0 -> nothing available
-    //     1 -> data available
-    //
-    // If there is no data, return 0.
-    //
-    // The caller will then do:
-    //
-    //     if (scancode == 0)
-    //         continue;
-    //
-    // --------------------------------------------------------
+    // Check bit 0.
+//
+// No keyboard data is available.
 
     if ((status & 0x01) == 0)
     {
@@ -331,74 +250,32 @@ static uint8_t keyboard_poll(void)
     }
 
 
-    // --------------------------------------------------------
-    // STEP 3: Read the scancode
-    // --------------------------------------------------------
-    //
-    // The actual keyboard data is available at port 0x60.
+    // Read the actual keyboard scancode.
 
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
 
 
-    // --------------------------------------------------------
-    // STEP 4: Ignore BREAK / KEY RELEASE codes
-    // --------------------------------------------------------
-    //
-    // In PS/2 Set 1 scancodes:
-    //
-    //     bit 7 = 1
-    //
-    // means that this is a key-release code.
-    //
-    // Example:
-    //
-    //     0x1E -> A pressed
-    //     0x9E -> A released
-    //
-    // We only want:
-    //
-    //     0x1E
-    //
-    // So ignore:
-    //
-    //     0x9E
-    //
-    // --------------------------------------------------------
+    // Ignore key-release codes.
 
     if (scancode & 0x80)
     {
-        // This is a BREAK code.
-        //
-        // Do not send it to the keyboard handler.
-
         return 0;
     }
 
 
-    // --------------------------------------------------------
-    // STEP 5: Return the MAKE code
-    // --------------------------------------------------------
-    //
-    // At this point:
-    //
-    //     data was available
-    //     ↓
-    //     scancode was read
-    //     ↓
-    //     bit 7 is 0
-    //     ↓
-    //     this is a key press
-    //
-    // Return it to the keyboard polling loop.
+    // Return the key-press scancode.
 
     return scancode;
 }
 
+
 // ============================================================
 // KEYBOARD SCANCODE TO ASCII
 // ============================================================
-
-// The keyboard sends scancodes, not ASCII characters.
+//
+// The keyboard does not send ASCII characters.
+//
+// It sends SCANCODES.
 //
 // Example:
 //
@@ -407,12 +284,22 @@ static uint8_t keyboard_poll(void)
 //     0x2E -> C key
 //
 // This function converts those scancodes into characters.
+//
+// IMPORTANT:
+//
+// This is only a basic keyboard driver for now.
+//
+// Shift, Caps Lock, Backspace, Enter, etc. will be added later.
+//
 
 static char keyboard_scancode_to_ascii(uint8_t scancode)
 {
     switch (scancode)
     {
-        // Numbers
+        // ----------------------------------------------------
+        // NUMBER ROW
+        // ----------------------------------------------------
+
         case 0x02: return '1';
         case 0x03: return '2';
         case 0x04: return '3';
@@ -424,7 +311,11 @@ static char keyboard_scancode_to_ascii(uint8_t scancode)
         case 0x0A: return '9';
         case 0x0B: return '0';
 
-        // QWERTY row
+
+        // ----------------------------------------------------
+        // TOP LETTER ROW
+        // ----------------------------------------------------
+
         case 0x10: return 'q';
         case 0x11: return 'w';
         case 0x12: return 'e';
@@ -436,7 +327,11 @@ static char keyboard_scancode_to_ascii(uint8_t scancode)
         case 0x18: return 'o';
         case 0x19: return 'p';
 
-        // Home row
+
+        // ----------------------------------------------------
+        // HOME LETTER ROW
+        // ----------------------------------------------------
+
         case 0x1E: return 'a';
         case 0x1F: return 's';
         case 0x20: return 'd';
@@ -447,7 +342,11 @@ static char keyboard_scancode_to_ascii(uint8_t scancode)
         case 0x25: return 'k';
         case 0x26: return 'l';
 
-        // Bottom row
+
+        // ----------------------------------------------------
+        // BOTTOM LETTER ROW
+        // ----------------------------------------------------
+
         case 0x2C: return 'z';
         case 0x2D: return 'x';
         case 0x2E: return 'c';
@@ -456,47 +355,67 @@ static char keyboard_scancode_to_ascii(uint8_t scancode)
         case 0x31: return 'n';
         case 0x32: return 'm';
 
-        // Space
+
+        // ----------------------------------------------------
+        // SPACE
+        // ----------------------------------------------------
+
         case 0x39: return ' ';
 
-        // Unknown key
+
+        // ----------------------------------------------------
+        // UNKNOWN SCANCODE
+        // ----------------------------------------------------
+
         default:
             return '\0';
+        
+        //----------------------------------------------------
+        // ENTER
+        // ----------------------------------------------------
+        //
+        // Enter key scancode:
+        //
+        //     0x1C
+        //
+        // We convert it to '\n'.
+        //
+        // console_putchar() already knows how to handle
+        // newline characters.
+        //
+
+        case 0x1C: return '\n';
     }
 }
+
 
 // ============================================================
 // FRAMEBUFFER
 // ============================================================
 
-// This function draws ONE pixel on the screen.
+// Draw ONE pixel on the screen.
 //
-// framebuffer -> information provided by Limine
+// framebuffer -> framebuffer information from Limine
 // x           -> horizontal position
 // y           -> vertical position
-// color       -> color of the pixel
-//
-// The framebuffer is essentially a large area of memory
-// containing the pixels of our screen.
+// color       -> pixel color
 
 static void put_pixel(struct limine_framebuffer *framebuffer,
                        uint32_t x,
                        uint32_t y,
                        uint32_t color)
 {
-    // framebuffer->address points to the beginning of the
-    // framebuffer memory.
-
     volatile uint32_t *fb = framebuffer->address;
 
-
-    // framebuffer->pitch tells us how many BYTES one complete
-    // row of pixels occupies.
-    //
-    // Each pixel is 4 bytes (32 bits).
-    //
-    // Therefore pitch / 4 gives us the number of pixels
-    // in one row.
+    // pitch is the number of BYTES in one screen row.
+//
+// Each pixel is 4 bytes.
+//
+// Therefore:
+//
+//     pitch / 4
+//
+// gives us pixels per row.
 
     fb[y * (framebuffer->pitch / 4) + x] = color;
 }
@@ -505,33 +424,87 @@ static void put_pixel(struct limine_framebuffer *framebuffer,
 // ============================================================
 // FONT DATA
 // ============================================================
-
-// Our font is a small handmade bitmap font.
 //
-// Each character is:
+// Each character:
 //
 //     5 pixels wide
 //     7 pixels high
 //
-// A '1' means that the pixel should be drawn.
-// A '0' means that the pixel should remain empty.
+// Each number below represents one row.
 //
-// draw_char() later converts these bitmap patterns
-// into actual framebuffer pixels.
+// Example:
+//
+//     10001
+//
+// means:
+//
+//     ON  OFF OFF OFF ON
+//
+// ============================================================
+
+
+// ============================================================
+// LOWERCASE LETTERS
+// ============================================================
 
 
 // ------------------------------------------------------------
-// H
+// a
 // ------------------------------------------------------------
 
-static const uint8_t font_H[7] = {
+static const uint8_t font_a[7] = {
+    0b00000,
+    0b01110,
+    0b00001,
+    0b01111,
+    0b10001,
+    0b10011,
+    0b01101
+};
+
+
+// ------------------------------------------------------------
+// b
+// ------------------------------------------------------------
+
+static const uint8_t font_b[7] = {
+    0b10000,
+    0b10000,
+    0b10110,
+    0b11001,
     0b10001,
     0b10001,
+    0b11110
+};
+
+
+// ------------------------------------------------------------
+// c
+// ------------------------------------------------------------
+
+static const uint8_t font_c[7] = {
+    0b00000,
+    0b01110,
     0b10001,
-    0b11111,
+    0b10000,
+    0b10000,
+    0b10001,
+    0b01110
+};
+
+
+// ------------------------------------------------------------
+// d
+// ------------------------------------------------------------
+
+static const uint8_t font_d[7] = {
+    0b00001,
+    0b00001,
+    0b01101,
+    0b10011,
     0b10001,
     0b10001,
-    0b10001
+    0b01111
 };
 
 
@@ -551,6 +524,96 @@ static const uint8_t font_e[7] = {
 
 
 // ------------------------------------------------------------
+// f
+// ------------------------------------------------------------
+
+static const uint8_t font_f[7] = {
+    0b00110,
+    0b01001,
+    0b01000,
+    0b11100,
+    0b01000,
+    0b01000,
+    0b01000
+};
+
+
+// ------------------------------------------------------------
+// g
+// ------------------------------------------------------------
+
+static const uint8_t font_g[7] = {
+    0b00000,
+    0b01111,
+    0b10001,
+    0b10001,
+    0b01111,
+    0b00001,
+    0b01110
+};
+
+
+// ------------------------------------------------------------
+// h
+// ------------------------------------------------------------
+
+static const uint8_t font_h[7] = {
+    0b10000,
+    0b10000,
+    0b10110,
+    0b11001,
+    0b10001,
+    0b10001,
+    0b10001
+};
+
+
+// ------------------------------------------------------------
+// i
+// ------------------------------------------------------------
+
+static const uint8_t font_i[7] = {
+    0b00100,
+    0b00000,
+    0b01100,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b01110
+};
+
+
+// ------------------------------------------------------------
+// j
+// ------------------------------------------------------------
+
+static const uint8_t font_j[7] = {
+    0b00010,
+    0b00000,
+    0b00110,
+    0b00010,
+    0b00010,
+    0b10010,
+    0b01100
+};
+
+
+// ------------------------------------------------------------
+// k
+// ------------------------------------------------------------
+
+static const uint8_t font_k[7] = {
+    0b10000,
+    0b10000,
+    0b10010,
+    0b10100,
+    0b11000,
+    0b10100,
+    0b10010
+};
+
+
+// ------------------------------------------------------------
 // l
 // ------------------------------------------------------------
 
@@ -562,6 +625,36 @@ static const uint8_t font_l[7] = {
     0b01000,
     0b01000,
     0b11100
+};
+
+
+// ------------------------------------------------------------
+// m
+// ------------------------------------------------------------
+
+static const uint8_t font_m[7] = {
+    0b00000,
+    0b11011,
+    0b10101,
+    0b10101,
+    0b10101,
+    0b10101,
+    0b10101
+};
+
+
+// ------------------------------------------------------------
+// n
+// ------------------------------------------------------------
+
+static const uint8_t font_n[7] = {
+    0b00000,
+    0b10110,
+    0b11001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001
 };
 
 
@@ -581,6 +674,194 @@ static const uint8_t font_o[7] = {
 
 
 // ------------------------------------------------------------
+// p
+// ------------------------------------------------------------
+
+static const uint8_t font_p[7] = {
+    0b00000,
+    0b11110,
+    0b10001,
+    0b10001,
+    0b11110,
+    0b10000,
+    0b10000
+};
+
+
+// ------------------------------------------------------------
+// q
+// ------------------------------------------------------------
+
+static const uint8_t font_q[7] = {
+    0b00000,
+    0b01111,
+    0b10001,
+    0b10001,
+    0b01111,
+    0b00001,
+    0b00001
+};
+
+
+// ------------------------------------------------------------
+// r
+// ------------------------------------------------------------
+
+static const uint8_t font_r[7] = {
+    0b00000,
+    0b10110,
+    0b11001,
+    0b10000,
+    0b10000,
+    0b10000,
+    0b10000
+};
+
+
+// ------------------------------------------------------------
+// s
+// ------------------------------------------------------------
+
+static const uint8_t font_s[7] = {
+    0b00000,
+    0b01111,
+    0b10000,
+    0b01110,
+    0b00001,
+    0b00001,
+    0b11110
+};
+
+
+// ------------------------------------------------------------
+// t
+// ------------------------------------------------------------
+
+static const uint8_t font_t[7] = {
+    0b01000,
+    0b01000,
+    0b11100,
+    0b01000,
+    0b01000,
+    0b01001,
+    0b00110
+};
+
+
+// ------------------------------------------------------------
+// u
+// ------------------------------------------------------------
+
+static const uint8_t font_u[7] = {
+    0b00000,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10011,
+    0b01101
+};
+
+
+// ------------------------------------------------------------
+// v
+// ------------------------------------------------------------
+
+static const uint8_t font_v[7] = {
+    0b00000,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b01010,
+    0b00100
+};
+
+
+// ------------------------------------------------------------
+// w
+// ------------------------------------------------------------
+
+static const uint8_t font_w[7] = {
+    0b00000,
+    0b10001,
+    0b10001,
+    0b10101,
+    0b10101,
+    0b10101,
+    0b01010
+};
+
+
+// ------------------------------------------------------------
+// x
+// ------------------------------------------------------------
+
+static const uint8_t font_x[7] = {
+    0b00000,
+    0b10001,
+    0b01010,
+    0b00100,
+    0b01010,
+    0b10001,
+    0b10001
+};
+
+
+// ------------------------------------------------------------
+// y
+// ------------------------------------------------------------
+
+static const uint8_t font_y[7] = {
+    0b10001,
+    0b10001,
+    0b10001,
+    0b01110,
+    0b00100,
+    0b01000,
+    0b10000
+};
+
+
+// ------------------------------------------------------------
+// z
+// ------------------------------------------------------------
+
+static const uint8_t font_z[7] = {
+    0b00000,
+    0b11111,
+    0b00010,
+    0b00100,
+    0b01000,
+    0b10000,
+    0b11111
+};
+
+
+// ============================================================
+// UPPERCASE LETTERS
+// ============================================================
+
+// We keep these because MonkeyOS currently uses uppercase
+// letters in its startup messages.
+
+
+// ------------------------------------------------------------
+// H
+// ------------------------------------------------------------
+
+static const uint8_t font_H[7] = {
+    0b10001,
+    0b10001,
+    0b10001,
+    0b11111,
+    0b10001,
+    0b10001,
+    0b10001
+};
+
+
+// ------------------------------------------------------------
 // M
 // ------------------------------------------------------------
 
@@ -592,6 +873,21 @@ static const uint8_t font_M[7] = {
     0b10001,
     0b10001,
     0b10001
+};
+
+
+// ------------------------------------------------------------
+// O
+// ------------------------------------------------------------
+
+static const uint8_t font_O[7] = {
+    0b01110,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b01110
 };
 
 
@@ -641,66 +937,6 @@ static const uint8_t font_E[7] = {
 
 
 // ------------------------------------------------------------
-// n
-// ------------------------------------------------------------
-
-static const uint8_t font_n[7] = {
-    0b00000,
-    0b10110,
-    0b11001,
-    0b10001,
-    0b10001,
-    0b10001,
-    0b10001
-};
-
-
-// ------------------------------------------------------------
-// k
-// ------------------------------------------------------------
-
-static const uint8_t font_k[7] = {
-    0b10000,
-    0b10000,
-    0b10010,
-    0b10100,
-    0b11000,
-    0b10100,
-    0b10010
-};
-
-
-// ------------------------------------------------------------
-// y
-// ------------------------------------------------------------
-
-static const uint8_t font_y[7] = {
-    0b10001,
-    0b10001,
-    0b10001,
-    0b01110,
-    0b00100,
-    0b01000,
-    0b10000
-};
-
-
-// ------------------------------------------------------------
-// O
-// ------------------------------------------------------------
-
-static const uint8_t font_O[7] = {
-    0b01110,
-    0b10001,
-    0b10001,
-    0b10001,
-    0b10001,
-    0b10001,
-    0b01110
-};
-
-
-// ------------------------------------------------------------
 // S
 // ------------------------------------------------------------
 
@@ -715,9 +951,114 @@ static const uint8_t font_S[7] = {
 };
 
 
-// ------------------------------------------------------------
-// !
-// ------------------------------------------------------------
+// ============================================================
+// NUMBERS
+// ============================================================
+
+static const uint8_t font_0[7] = {
+    0b01110,
+    0b10001,
+    0b10011,
+    0b10101,
+    0b11001,
+    0b10001,
+    0b01110
+};
+
+static const uint8_t font_1[7] = {
+    0b00100,
+    0b01100,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b01110
+};
+
+static const uint8_t font_2[7] = {
+    0b01110,
+    0b10001,
+    0b00001,
+    0b00010,
+    0b00100,
+    0b01000,
+    0b11111
+};
+
+static const uint8_t font_3[7] = {
+    0b11110,
+    0b00001,
+    0b00001,
+    0b01110,
+    0b00001,
+    0b00001,
+    0b11110
+};
+
+static const uint8_t font_4[7] = {
+    0b00010,
+    0b00110,
+    0b01010,
+    0b10010,
+    0b11111,
+    0b00010,
+    0b00010
+};
+
+static const uint8_t font_5[7] = {
+    0b11111,
+    0b10000,
+    0b10000,
+    0b11110,
+    0b00001,
+    0b00001,
+    0b11110
+};
+
+static const uint8_t font_6[7] = {
+    0b00110,
+    0b01000,
+    0b10000,
+    0b11110,
+    0b10001,
+    0b10001,
+    0b01110
+};
+
+static const uint8_t font_7[7] = {
+    0b11111,
+    0b00001,
+    0b00010,
+    0b00100,
+    0b01000,
+    0b01000,
+    0b01000
+};
+
+static const uint8_t font_8[7] = {
+    0b01110,
+    0b10001,
+    0b10001,
+    0b01110,
+    0b10001,
+    0b10001,
+    0b01110
+};
+
+static const uint8_t font_9[7] = {
+    0b01110,
+    0b10001,
+    0b10001,
+    0b01111,
+    0b00001,
+    0b00010,
+    0b01100
+};
+
+
+// ============================================================
+// EXCLAMATION MARK
+// ============================================================
 
 static const uint8_t font_exclamation[7] = {
     0b00100,
@@ -733,63 +1074,95 @@ static const uint8_t font_exclamation[7] = {
 // ============================================================
 // GET CHARACTER
 // ============================================================
-
-// This function maps a character to its bitmap.
+//
+// Convert a character into its bitmap.
 //
 // Example:
 //
-//     get_char('H')
+//     get_char('a')
 //          ↓
-//     returns font_H
+//     font_a
 //
-// If we don't have a bitmap for a character,
-// we return NULL.
+// If a character is not supported:
+//
+//     NULL
+//
 
 static const uint8_t *get_char(char c)
 {
     switch (c)
     {
-        case 'H':
-            return font_H;
+        // ----------------------------------------------------
+        // LOWERCASE LETTERS
+        // ----------------------------------------------------
 
-        case 'e':
-            return font_e;
+        case 'a': return font_a;
+        case 'b': return font_b;
+        case 'c': return font_c;
+        case 'd': return font_d;
+        case 'e': return font_e;
+        case 'f': return font_f;
+        case 'g': return font_g;
+        case 'h': return font_h;
+        case 'i': return font_i;
+        case 'j': return font_j;
+        case 'k': return font_k;
+        case 'l': return font_l;
+        case 'm': return font_m;
+        case 'n': return font_n;
+        case 'o': return font_o;
+        case 'p': return font_p;
+        case 'q': return font_q;
+        case 'r': return font_r;
+        case 's': return font_s;
+        case 't': return font_t;
+        case 'u': return font_u;
+        case 'v': return font_v;
+        case 'w': return font_w;
+        case 'x': return font_x;
+        case 'y': return font_y;
+        case 'z': return font_z;
 
-        case 'l':
-            return font_l;
 
-        case 'o':
-            return font_o;
+        // ----------------------------------------------------
+        // UPPERCASE LETTERS
+        // ----------------------------------------------------
 
-        case 'M':
-            return font_M;
+        case 'H': return font_H;
+        case 'M': return font_M;
+        case 'N': return font_N;
+        case 'K': return font_K;
+        case 'E': return font_E;
+        case 'O': return font_O;
+        case 'S': return font_S;
 
-        case 'N':
-            return font_N;
 
-        case 'K':
-            return font_K;
+        // ----------------------------------------------------
+        // NUMBERS
+        // ----------------------------------------------------
 
-        case 'E':
-            return font_E;
+        case '0': return font_0;
+        case '1': return font_1;
+        case '2': return font_2;
+        case '3': return font_3;
+        case '4': return font_4;
+        case '5': return font_5;
+        case '6': return font_6;
+        case '7': return font_7;
+        case '8': return font_8;
+        case '9': return font_9;
 
-        case 'n':
-            return font_n;
 
-        case 'k':
-            return font_k;
+        // ----------------------------------------------------
+        // EXCLAMATION MARK
+        // ----------------------------------------------------
 
-        case 'y':
-            return font_y;
+        case '!': return font_exclamation;
 
-        case 'O':
-            return font_O;
 
-        case 'S':
-            return font_S;
-
-        case '!':
-            return font_exclamation;
+        // ----------------------------------------------------
+        // UNKNOWN CHARACTER
+        // ----------------------------------------------------
 
         default:
             return NULL;
@@ -800,14 +1173,15 @@ static const uint8_t *get_char(char c)
 // ============================================================
 // DRAW CHARACTER
 // ============================================================
-
-// This function converts our 5 x 7 bitmap into real pixels.
 //
-// With scale = 4:
+// Convert the 5 × 7 bitmap into actual framebuffer pixels.
+//
+// scale = 4:
 //
 //     1 bitmap pixel
 //          ↓
-//     becomes a 4 x 4 block of screen pixels.
+//     4 × 4 screen pixels
+//
 
 static void draw_char(struct limine_framebuffer *framebuffer,
                       char c,
@@ -816,33 +1190,32 @@ static void draw_char(struct limine_framebuffer *framebuffer,
                       uint32_t color,
                       uint32_t scale)
 {
-    // Get the bitmap belonging to this character.
+    // Find the bitmap for this character.
 
     const uint8_t *bitmap = get_char(c);
 
 
-    // A space does not have a bitmap.
-    //
-    // It simply represents empty space.
+    // Space is simply empty.
 
-    if (c == ' ') {
+    if (c == ' ')
+    {
         return;
     }
 
 
-    // If the character isn't in our font,
-    // there is nothing to draw.
+    // Character is not supported.
 
-    if (bitmap == NULL) {
+    if (bitmap == NULL)
+    {
         return;
     }
 
 
-    // Our font has 7 rows.
+    // Go through every row.
 
     for (uint32_t row = 0; row < 7; row++)
     {
-        // Each row contains 5 pixels.
+        // Go through every column.
 
         for (uint32_t col = 0; col < 5; col++)
         {
@@ -850,7 +1223,7 @@ static void draw_char(struct limine_framebuffer *framebuffer,
 
             if (bitmap[row] & (1 << (4 - col)))
             {
-                // Scale the bitmap pixel into a larger
+                // Convert one bitmap pixel into a larger
                 // block of actual screen pixels.
 
                 for (uint32_t dy = 0; dy < scale; dy++)
@@ -875,15 +1248,6 @@ static void draw_char(struct limine_framebuffer *framebuffer,
 // CONSOLE CURSOR
 // ============================================================
 
-// The console needs to remember where the next character
-// should be drawn.
-//
-// We start at:
-//
-//     x = 50
-//     y = 50
-//
-
 static uint32_t cursor_x = 50;
 static uint32_t cursor_y = 50;
 
@@ -891,23 +1255,24 @@ static uint32_t cursor_y = 50;
 // ============================================================
 // CHARACTER SIZE AND SPACING
 // ============================================================
-
-// Our bitmap is:
 //
-//     5 pixels wide
-//     7 pixels high
+// Bitmap:
 //
-// With scale = 4:
+//     5 × 7
 //
-//     width  = 5 × 4 = 20 pixels
-//     height = 7 × 4 = 28 pixels
+// Scale:
+//
+//     4
+//
+// Actual character:
+//
+//     20 × 28 pixels
 //
 // We reserve:
 //
-//     CHAR_WIDTH  = 24
-//     CHAR_HEIGHT = 36
+//     24 pixels horizontally
+//     36 pixels vertically
 //
-// This gives us some spacing between characters and lines.
 
 static const uint32_t CHAR_WIDTH = 24;
 static const uint32_t CHAR_HEIGHT = 36;
@@ -917,59 +1282,15 @@ static const uint32_t CHAR_HEIGHT = 36;
 // CONSOLE SCROLL
 // ============================================================
 //
-// NEW FEATURE:
-//
-// When the cursor reaches the bottom of the screen,
-// we move the entire framebuffer upward by one text line.
-//
-// Example:
-//
-// BEFORE:
-//
-//     Line 1
-//     Line 2
-//     Line 3
-//     Line 4
-//
-// AFTER SCROLL:
-//
-//     Line 2
-//     Line 3
-//     Line 4
-//     Line 5
-//
-// Line 1 has disappeared and a new empty area is available
-// at the bottom.
+// Move framebuffer content upward when we reach the bottom.
 //
 
 static void console_scroll(struct limine_framebuffer *framebuffer)
 {
-    // --------------------------------------------------------
-    // GET FRAMEBUFFER PITCH
-    // --------------------------------------------------------
-    //
-    // pitch = number of BYTES used by one complete row.
-    //
-
     uint32_t pitch = framebuffer->pitch;
 
 
-    // --------------------------------------------------------
-    // MOVE SCREEN CONTENT UP
-    // --------------------------------------------------------
-    //
-    // We skip the first CHAR_HEIGHT rows.
-    //
-    // Data from:
-    //
-    //     row CHAR_HEIGHT
-    //
-    // is moved to:
-    //
-    //     row 0
-    //
-    // memmove() is used because source and destination overlap.
-    //
+    // Move the framebuffer contents upward by one text line.
 
     memmove(
         framebuffer->address,
@@ -981,17 +1302,7 @@ static void console_scroll(struct limine_framebuffer *framebuffer)
     );
 
 
-    // --------------------------------------------------------
-    // CLEAR BOTTOM AREA
-    // --------------------------------------------------------
-    //
-    // After moving the screen upward, the bottom
-    // CHAR_HEIGHT rows contain old data.
-    //
-    // Clear that area with zero.
-    //
-    // Zero represents black in our current framebuffer setup.
-    //
+    // Clear the new empty area at the bottom.
 
     memset(
         (uint8_t *)framebuffer->address +
@@ -1003,17 +1314,141 @@ static void console_scroll(struct limine_framebuffer *framebuffer)
     );
 
 
-    // --------------------------------------------------------
-    // MOVE CURSOR UP
-    // --------------------------------------------------------
-    //
-    // The screen moved upward by CHAR_HEIGHT pixels.
-    //
-    // Therefore the cursor must also move upward by
-    // CHAR_HEIGHT pixels.
-    //
+    // Move cursor upward because the screen moved upward.
 
     cursor_y -= CHAR_HEIGHT;
+}
+// ============================================================
+// CLEAR CHARACTER AREA
+// ============================================================
+//
+// Erase one character cell from the framebuffer.
+//
+// We use this for Backspace.
+//
+// The character cell is:
+//
+//     CHAR_WIDTH  ×  CHAR_HEIGHT
+//
+// We fill the entire cell with black.
+//
+
+static void clear_character_area(
+    struct limine_framebuffer *framebuffer,
+    uint32_t x,
+    uint32_t y
+)
+{
+    for (uint32_t py = 0; py < CHAR_HEIGHT; py++)
+    {
+        for (uint32_t px = 0; px < CHAR_WIDTH; px++)
+        {
+            put_pixel(
+                framebuffer,
+                x + px,
+                y + py,
+                0x000000
+            );
+        }
+    }
+}
+// ============================================================
+// CONSOLE BACKSPACE
+// ============================================================
+//
+// Backspace removes the character immediately before
+// the current cursor position.
+//
+// Example:
+//
+//     Hello|
+//
+// After Backspace:
+//
+//     Hell|
+//
+// The cursor moves backwards by one character cell
+// and that cell is cleared.
+//
+
+static void console_backspace(
+    struct limine_framebuffer *framebuffer
+)
+{
+    // --------------------------------------------------------
+    // If we are at the very beginning of the console,
+    // there is nothing to delete.
+    // --------------------------------------------------------
+
+    if (cursor_x == 50 && cursor_y == 50)
+    {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // NORMAL CASE
+    // --------------------------------------------------------
+    //
+    // There is a previous character on the same line.
+    //
+
+    if (cursor_x > 50)
+    {
+        // Move cursor one character backwards.
+
+        cursor_x -= CHAR_WIDTH;
+
+
+        // Erase that character.
+
+        clear_character_area(
+            framebuffer,
+            cursor_x,
+            cursor_y
+        );
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // BEGINNING OF LINE
+    // --------------------------------------------------------
+    //
+    // If cursor_x == 50, we are at the beginning of a line.
+    //
+    // Move to the previous line.
+    //
+
+    if (cursor_y > 50)
+    {
+        cursor_y -= CHAR_HEIGHT;
+
+
+        // Calculate how many character columns fit.
+
+        uint32_t columns =
+            (framebuffer->width - 50) / CHAR_WIDTH;
+
+
+        // Move cursor to the last character position.
+
+        if (columns > 0)
+        {
+            cursor_x =
+                50 + (columns - 1) * CHAR_WIDTH;
+        }
+
+
+        // Erase the character at that position.
+
+        clear_character_area(
+            framebuffer,
+            cursor_x,
+            cursor_y
+        );
+    }
 }
 
 
@@ -1021,38 +1456,31 @@ static void console_scroll(struct limine_framebuffer *framebuffer)
 // CONSOLE PUTCHAR
 // ============================================================
 //
-// Prints ONE character.
+// Print ONE character.
 //
-// It handles:
+// Handles:
 //
-//     1. Newline
-//     2. Automatic line wrapping
-//     3. Drawing the character
-//     4. Moving the cursor
-//     5. Screen scrolling
+//     - newline
+//     - wrapping
+//     - drawing
+//     - cursor movement
+//     - scrolling
 //
 
 static void console_putchar(struct limine_framebuffer *framebuffer,
                             char c)
 {
     // --------------------------------------------------------
-    // HANDLE NEWLINE
+    // NEWLINE
     // --------------------------------------------------------
-    //
-    // '\n' means:
-    //
-    //     "Move to the beginning of the next line."
-    //
-    // It does not draw a visible character.
-    //
 
     if (c == '\n')
     {
-        // Return to the left side.
+        // Return to beginning of line.
 
         cursor_x = 50;
 
-        // Move down one complete text line.
+        // Move down.
 
         cursor_y += CHAR_HEIGHT;
     }
@@ -1062,16 +1490,10 @@ static void console_putchar(struct limine_framebuffer *framebuffer,
         // ----------------------------------------------------
         // AUTOMATIC LINE WRAPPING
         // ----------------------------------------------------
-        //
-        // Check whether the next character will fit.
 
         if (cursor_x + CHAR_WIDTH > framebuffer->width)
         {
-            // Start from the left again.
-
             cursor_x = 50;
-
-            // Move down one line.
 
             cursor_y += CHAR_HEIGHT;
         }
@@ -1086,38 +1508,22 @@ static void console_putchar(struct limine_framebuffer *framebuffer,
             c,
             cursor_x,
             cursor_y,
-            0xFFFFFF,     // White
-            4             // Scale
+            0xFFFFFF,
+            4
         );
 
 
         // ----------------------------------------------------
         // MOVE CURSOR
         // ----------------------------------------------------
-        //
-        // Move right so that the next character is placed
-        // after the current character.
-        //
 
         cursor_x += CHAR_WIDTH;
     }
 
 
     // --------------------------------------------------------
-    // CHECK BOTTOM OF SCREEN
+    // CHECK SCREEN BOTTOM
     // --------------------------------------------------------
-    //
-    // This check happens for BOTH:
-    //
-    //     normal characters
-    //
-    // and:
-    //
-    //     newline characters
-    //
-    // If the cursor has reached the bottom,
-    // scroll the screen upward.
-    //
 
     if (cursor_y + CHAR_HEIGHT > framebuffer->height)
     {
@@ -1130,182 +1536,24 @@ static void console_putchar(struct limine_framebuffer *framebuffer,
 // CONSOLE WRITE
 // ============================================================
 //
-// Prints an entire C string.
-//
-// Instead of:
-//
-//     console_putchar(framebuffer, 'H');
-//     console_putchar(framebuffer, 'e');
-//     console_putchar(framebuffer, 'l');
-//     console_putchar(framebuffer, 'l');
-//     console_putchar(framebuffer, 'o');
-//
-// we can now simply write:
-//
-//     console_write(framebuffer, "Hello");
-//
-// This function also implements WORD-AWARE WRAPPING.
-//
-// This means we try not to split a word between two lines.
+// Print an entire C string.
 //
 
 static void console_write(struct limine_framebuffer *framebuffer,
                           const char *string)
 {
-    // Continue until we reach the end of the C string.
-//
-// C strings end with:
-//
-//     '\0'
-//
-
     while (*string)
     {
-        // ----------------------------------------------------
-        // HANDLE NEWLINE
-        // ----------------------------------------------------
-        //
-        // Let console_putchar() handle '\n'.
+        // Let console_putchar() handle every character.
 
-        if (*string == '\n')
-        {
-            console_putchar(
-                framebuffer,
-                *string
-            );
+        console_putchar(
+            framebuffer,
+            *string
+        );
 
-            string++;
+        // Move to next character.
 
-            continue;
-        }
-
-
-        // ----------------------------------------------------
-        // FIND NEXT WORD
-        // ----------------------------------------------------
-        //
-        // 'word' points to the beginning of the word.
-        //
-        // Example:
-        //
-        //     "Hello MonkeyOS!"
-        //      ^
-        //      word
-
-        const char *word = string;
-
-
-        // Count the characters in this word.
-
-        uint32_t word_length = 0;
-
-
-        // Continue until we find:
-        //
-        //     space
-        //     newline
-        //     end of string
-        //
-
-        while (word[word_length] != ' ' &&
-               word[word_length] != '\n' &&
-               word[word_length] != '\0')
-        {
-            word_length++;
-        }
-
-
-        // ----------------------------------------------------
-        // CALCULATE WORD WIDTH
-        // ----------------------------------------------------
-        //
-        // Each character occupies CHAR_WIDTH pixels.
-        //
-        // Therefore:
-        //
-        //     word width =
-        //     word length × CHAR_WIDTH
-        //
-
-        uint32_t word_width =
-            word_length * CHAR_WIDTH;
-
-
-        // ----------------------------------------------------
-        // CHECK WHETHER WORD FITS
-        // ----------------------------------------------------
-        //
-        // If the complete word doesn't fit,
-        // move to the next line before printing it.
-        //
-
-        if (cursor_x + word_width > framebuffer->width)
-        {
-            // Start from the left.
-
-            cursor_x = 50;
-
-            // Move down one line.
-
-            cursor_y += CHAR_HEIGHT;
-
-
-            // ------------------------------------------------
-            // CHECK BOTTOM AFTER WORD WRAP
-            // ------------------------------------------------
-            //
-            // Word wrapping itself can move the cursor below
-            // the bottom of the screen.
-            //
-
-            if (cursor_y + CHAR_HEIGHT > framebuffer->height)
-            {
-                console_scroll(framebuffer);
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // PRINT THE WORD
-        // ----------------------------------------------------
-        //
-        // Print every character belonging to this word.
-
-        for (uint32_t i = 0; i < word_length; i++)
-        {
-            console_putchar(
-                framebuffer,
-                word[i]
-            );
-        }
-
-
-        // ----------------------------------------------------
-        // HANDLE SPACE AFTER WORD
-        // ----------------------------------------------------
-        //
-        // If there is a space after the word,
-        // print that space and move to the next word.
-        //
-
-        if (string[word_length] == ' ')
-        {
-            console_putchar(
-                framebuffer,
-                ' '
-            );
-
-            string += word_length + 1;
-        }
-
-        else
-        {
-            // No space.
-            //
-            // Move directly to the next character.
-
-            string += word_length;
-        }
+        string++;
     }
 }
 
@@ -1313,21 +1561,12 @@ static void console_write(struct limine_framebuffer *framebuffer,
 // ============================================================
 // KERNEL ENTRY POINT
 // ============================================================
-//
-// This is where MonkeyOS starts executing.
-//
-// Limine loads our kernel and eventually transfers control
-// to kmain().
-//
 
 void kmain(void)
 {
     // --------------------------------------------------------
     // CHECK LIMINE BASE REVISION
     // --------------------------------------------------------
-
-    // Make sure the bootloader supports the base revision
-    // requested by our kernel.
 
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false)
     {
@@ -1338,8 +1577,6 @@ void kmain(void)
     // --------------------------------------------------------
     // CHECK FRAMEBUFFER
     // --------------------------------------------------------
-
-    // Make sure Limine successfully provided a framebuffer.
 
     if (framebuffer_request.response == NULL ||
         framebuffer_request.response->framebuffer_count < 1)
@@ -1352,19 +1589,13 @@ void kmain(void)
     // GET FIRST FRAMEBUFFER
     // --------------------------------------------------------
 
-    // Limine can provide more than one framebuffer.
-    //
-    // For now, we simply use the first one.
-
     struct limine_framebuffer *framebuffer =
         framebuffer_request.response->framebuffers[0];
 
 
     // ========================================================
-    // TEST OUR CONSOLE
+    // STARTUP MESSAGE
     // ========================================================
-
-    // Print a short message.
 
     console_write(
         framebuffer,
@@ -1377,123 +1608,66 @@ void kmain(void)
     );
 
 
-    // --------------------------------------------------------
-    // TEST WORD-AWARE WRAPPING
-    // --------------------------------------------------------
-    //
-    // This long string allows us to test our word wrapping.
-    //
-    // Words should not be unnecessarily split between lines.
-
-    console_write(
-        framebuffer,
-        "Hello MonkeyOS! Hello MonkeyOS! Hello MonkeyOS! "
-        "Hello MonkeyOS! Hello MonkeyOS! Hello MonkeyOS! "
-        "Hello MonkeyOS! Hello MonkeyOS! Hello MonkeyOS! "
-        "Hello MonkeyOS!"
-    );
-
-
-    // --------------------------------------------------------
-    // TEST SCROLLING
-    // --------------------------------------------------------
-    //
-    // We print many lines so that the framebuffer becomes full.
-    //
-    // Once the bottom is reached, console_scroll() should move
-    // the old content upward.
-    //
-    // You can remove this test later.
-
-    console_write(
-        framebuffer,
-        "\n"
-        "Line 1\n"
-        "Line 2\n"
-        "Line 3\n"
-        "Line 4\n"
-        "Line 5\n"
-        "Line 6\n"
-        "Line 7\n"
-        "Line 8\n"
-        "Line 9\n"
-        "Line 10\n"
-        "Line 11\n"
-        "Line 12\n"
-        "Line 13\n"
-        "Line 14\n"
-        "Line 15\n"
-        "Line 16\n"
-        "Line 17\n"
-        "Line 18\n"
-        "Line 19\n"
-        "Line 20\n"
-        "Line 21\n"
-        "Line 22\n"
-        "Line 23\n"
-        "Line 24\n"
-    );
-
-
-    // ============================================================
+// ========================================================
 // KEYBOARD POLLING LOOP
-// ============================================================
-
-// The kernel must stay running so that it can continuously
-// check the keyboard.
-//
-// This is called polling.
-//
-// The CPU repeatedly asks:
-//
-//     "Did the keyboard send anything?"
+// ========================================================
 
 for (;;)
 {
-    // Try to read a keyboard scancode.
+    // ----------------------------------------------------
+    // GET SCANCODE
+    // ----------------------------------------------------
 
     uint8_t scancode = keyboard_poll();
 
-    // If no data is available, keep checking.
+
+    // No key available.
 
     if (scancode == 0)
     {
         continue;
     }
 
-    // --------------------------------------------------------
-    // TEMPORARY TEST
-    // --------------------------------------------------------
-    //
-    // We are NOT converting the scancode into a character yet.
-    //
-    // For now, simply print '!' whenever a key is detected.
-    //
-    // This lets us verify that:
-    //
-    // Keyboard
-    //     ↓
-    // Port 0x60
-    //     ↓
-    // MonkeyOS
-    //
-    // is working.
 
-    // Convert the scancode into an ASCII character.
+    // ----------------------------------------------------
+    // BACKSPACE
+    // ----------------------------------------------------
+    //
+    // Backspace scancode:
+    //
+    //     0x0E
+    //
+    // It is handled separately because it is an
+    // editing operation rather than a printable
+    // character.
+    //
 
-char character = keyboard_scancode_to_ascii(scancode);
+    if (scancode == 0x0E)
+    {
+        console_backspace(framebuffer);
+
+        continue;
+    }
 
 
-// Only print characters that we recognize.
+    // ----------------------------------------------------
+    // CONVERT SCANCODE TO CHARACTER
+    // ----------------------------------------------------
 
-if (character != '\0')
-{
-    console_putchar(
-        framebuffer,
-        character
-    );
+    char character =
+        keyboard_scancode_to_ascii(scancode);
+
+
+    // ----------------------------------------------------
+    // PRINT CHARACTER
+    // ----------------------------------------------------
+
+    if (character != '\0')
+    {
+        console_putchar(
+            framebuffer,
+            character
+        );
+    }
 }
-}
-
-    
 }
